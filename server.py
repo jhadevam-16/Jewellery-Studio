@@ -91,8 +91,7 @@ def generate_image_gemini():
         print(f'[Gemini] Exception: {e}')
         return jsonify({'error': str(e)}), 500
 
-if __name__ == '__main__':
-    print('\n✅ Design Innovation Studio running!')
-    print('   Model: gemini-2.5-flash-image')
-    print('👉 Open http://localhost:5000 in your browser\n')
-    app.run(debug=True, port=5000)
+if __name__ == "__main__":
+    import os
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
