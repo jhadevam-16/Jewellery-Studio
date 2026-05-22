@@ -229,6 +229,17 @@ body::before{content:'';display:block;height:3px;background:linear-gradient(90de
 .zoom-btn:hover{background:rgba(255,255,255,0.22);}
 .zoom-scale-label{font-size:12px;color:rgba(255,255,255,0.5);min-width:44px;text-align:center;}
 
+/* Usage timer bar */
+.usage-bar{max-width:900px;margin:0 auto 0;padding:0 2rem;}
+.usage-inner{display:flex;align-items:center;gap:12px;background:var(--surface);border:0.5px solid var(--border-strong);border-radius:10px;padding:10px 16px;font-size:12px;color:var(--ink-mid);transition:all 0.3s;}
+.usage-inner.blocked{background:#FEF2F2;border-color:#FCA5A5;color:#991B1B;}
+.usage-track{flex:1;height:4px;background:var(--border);border-radius:4px;overflow:hidden;min-width:80px;}
+.usage-fill{height:100%;background:linear-gradient(90deg,var(--gold-dark),var(--gold));border-radius:4px;transition:width 0.5s ease;}
+.usage-inner.blocked .usage-fill{background:linear-gradient(90deg,#DC2626,#EF4444);}
+.usage-text{white-space:nowrap;font-weight:500;min-width:120px;text-align:right;}
+.usage-icon{font-size:14px;flex-shrink:0;}
+.usage-hidden{display:none;}
+
 @keyframes fadeUp{from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:translateY(0);}}
 @keyframes fadeIn{from{opacity:0;}to{opacity:1;}}
 @keyframes slideDown{from{opacity:0;transform:translateY(-6px);}to{opacity:1;transform:translateY(0);}}
@@ -252,6 +263,16 @@ body::before{content:'';display:block;height:3px;background:linear-gradient(90de
     <p>Upload a product photo — Claude analyzes it, Gemini 2.5 Flash visualizes the top pick</p>
     <div class="header-rule"><span>◆</span></div>
   </header>
+
+  <!-- Usage timer -->
+  <div class="usage-bar" id="usageBar">
+    <div class="usage-inner" id="usageInner">
+      <span class="usage-icon" id="usageIcon">⏱</span>
+      <div class="usage-track"><div class="usage-fill" id="usageFill" style="width:0%"></div></div>
+      <span class="usage-text" id="usageText">Loading…</span>
+    </div>
+  </div>
+  <div style="height:12px"></div>
 
   <div id="inputSection">
 
@@ -385,6 +406,87 @@ body::before{content:'';display:block;height:3px;background:linear-gradient(90de
   </div>
 </div>
 <script>
+// ── Usage rate-limit tracker ─────────────────────────────
+let _usageBlocked = false;
+let _usageWait    = 0;
+let _usageTimer   = null;
+
+async function fetchUsageStatus(){
+  try {
+    const res = await fetch('/api/usage-status');
+    const d   = await res.json();
+    updateUsageUI(d);
+    return d;
+  } catch(e) {
+    // Server unreachable — hide bar
+    document.getElementById('usageBar').classList.add('usage-hidden');
+    return null;
+  }
+}
+
+function updateUsageUI(d){
+  const bar   = document.getElementById('usageInner');
+  const fill  = document.getElementById('usageFill');
+  const text  = document.getElementById('usageText');
+  const icon  = document.getElementById('usageIcon');
+  document.getElementById('usageBar').classList.remove('usage-hidden');
+
+  const pct = Math.min(100, Math.round((d.used_seconds / d.limit_seconds) * 100));
+  fill.style.width = pct + '%';
+
+  if (d.blocked) {
+    _usageBlocked = true;
+    _usageWait    = d.wait_seconds;
+    bar.classList.add('blocked');
+    icon.textContent = '🚫';
+    text.textContent = 'Wait ' + fmtSec(d.wait_seconds);
+    startCooldownTick();
+  } else {
+    _usageBlocked = false;
+    _usageWait    = 0;
+    bar.classList.remove('blocked');
+    icon.textContent = '⏱';
+    const remMin = Math.floor(d.remaining_seconds / 60);
+    const remSec = d.remaining_seconds % 60;
+    text.textContent = remMin + 'm ' + remSec + 's left this hour';
+    stopCooldownTick();
+  }
+}
+
+function fmtSec(s){ const m=Math.floor(s/60); return m+'m '+(s%60)+'s'; }
+
+function startCooldownTick(){
+  if (_usageTimer) return;
+  _usageTimer = setInterval(()=>{
+    _usageWait--;
+    if (_usageWait <= 0){
+      stopCooldownTick();
+      fetchUsageStatus(); // refresh
+      return;
+    }
+    document.getElementById('usageText').textContent = 'Wait ' + fmtSec(_usageWait);
+  }, 1000);
+}
+
+function stopCooldownTick(){
+  if (_usageTimer){ clearInterval(_usageTimer); _usageTimer = null; }
+}
+
+// Check if user is blocked — returns true if OK to proceed
+async function checkUsageBeforeAction(){
+  const status = await fetchUsageStatus();
+  if (!status) return true; // server down, let them try
+  if (status.blocked){
+    showErr('Usage limit reached (25 min / hour). Please wait ' + fmtSec(status.wait_seconds) + ' before trying again.');
+    return false;
+  }
+  return true;
+}
+
+// Poll every 15s while page is open
+fetchUsageStatus();
+setInterval(fetchUsageStatus, 15000);
+
 let uploadedBase64 = '';
 let uploadedMime   = 'image/jpeg';
 let pastedUrl      = '';
@@ -469,6 +571,9 @@ function robustParse(raw){
 async function runAnalysis(){
   if(inputMode==='url'&&!pastedUrl){ showErr('Please paste a URL and click "Load Preview" first.'); return; }
   if(inputMode==='upload'&&!uploadedBase64){ showErr('Please upload a product image first.'); return; }
+
+  // ── Rate-limit pre-check ──
+  if (!(await checkUsageBeforeAction())) return;
 
   document.getElementById('errBox').classList.remove('on');
   document.getElementById('runBtn').disabled=true;
@@ -680,7 +785,9 @@ ${focus?'Focus modifications on: '+focus:''}`;
     const res=await fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:4000,system,messages:[{role:'user',content:[imageBlock,{type:'text',text:'Scan the image carefully. Count every visible product. Classify each one. Then return the JSON with 6 modification ideas. For sets, every piece must appear in every imagen_prompt.'}]}]})});
     clearInterval(timer);
     const data=await res.json();
+    if(data.rate_limited) throw new Error(data.error);
     if(data.error) throw new Error(data.error.message||data.error);
+    fetchUsageStatus(); // refresh usage bar
     const raw=data.content.filter(b=>b.type==='text').map(b=>b.text).join('');
     parsed=robustParse(raw);
     if(!parsed) throw new Error('Could not parse response — please try again');
@@ -725,8 +832,10 @@ ${focus?'Focus modifications on: '+focus:''}`;
     document.getElementById('progressLabel').textContent = 'Top pick ready!';
 
     const data = await res.json();
+    if (data.rate_limited) throw new Error(data.error);
     if (data.error) throw new Error(data.error);
     if (!data.imageData) throw new Error('No image returned');
+    fetchUsageStatus(); // refresh usage bar
 
     const imgSrc = 'data:'+(data.mimeType||'image/png')+';base64,'+data.imageData;
     window._ideaImages[autoIdx] = imgSrc;  // store for compare
@@ -827,6 +936,8 @@ async function generateIdeaImage(i) {
     alert('Please wait — another image is currently generating.');
     return;
   }
+  // ── Rate-limit pre-check ──
+  if (!(await checkUsageBeforeAction())) return;
   _generatingIdx = i;
 
   const btnBox = document.getElementById('ideaGenBtn'+i);
@@ -851,8 +962,10 @@ async function generateIdeaImage(i) {
     clearTimeout(timeoutId);
 
     const data = await res.json();
+    if (data.rate_limited) throw new Error(data.error);
     if (data.error) throw new Error(data.error);
     if (!data.imageData) throw new Error('No image returned');
+    fetchUsageStatus(); // refresh usage bar
 
     const src = 'data:'+(data.mimeType||'image/png')+';base64,'+data.imageData;
     window._ideaImages[i] = src;  // store for compare
