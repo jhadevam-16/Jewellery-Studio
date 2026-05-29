@@ -1,5 +1,6 @@
 import os
 import time
+import base64
 import requests
 from flask import Flask, request, jsonify, send_from_directory
 from dotenv import load_dotenv
@@ -11,7 +12,7 @@ app = Flask(__name__, static_folder='public')
 CORS(app)
 
 ANTHROPIC_KEY = os.getenv('ANTHROPIC_KEY')
-GOOGLE_KEY    = os.getenv('GOOGLE_KEY')
+FAL_KEY       = os.getenv('FAL_KEY')        # fal.ai API key — replaces GOOGLE_KEY
 
 # ── Rate-limit config ─────────────────────────────────────
 WINDOW_SECONDS = 3600    # 1-hour rolling window
@@ -30,12 +31,10 @@ def _get_usage(ip):
     rec = _usage.get(ip)
 
     if rec is None or (now - rec['window_start']) >= WINDOW_SECONDS:
-        # No record or window expired — fresh slate
         return 0, USAGE_LIMIT, False, 0
 
-    used    = rec['used']
-    elapsed = now - rec['window_start']
-    resets  = rec['window_start'] + WINDOW_SECONDS
+    used   = rec['used']
+    resets = rec['window_start'] + WINDOW_SECONDS
 
     if used >= USAGE_LIMIT:
         return used, 0, True, resets
@@ -50,8 +49,8 @@ def _record_usage(ip, seconds):
     if rec is None or (now - rec['window_start']) >= WINDOW_SECONDS:
         _usage[ip] = {'window_start': now, 'used': seconds, 'last_req': now}
     else:
-        rec['used']     += seconds
-        rec['last_req']  = now
+        rec['used']    += seconds
+        rec['last_req'] = now
 
 def _check_limit():
     """Return a 429 JSON response if the user is blocked, else None."""
@@ -60,10 +59,10 @@ def _check_limit():
     if blocked:
         wait = max(0, int(resets - time.time()))
         return jsonify({
-            'error': f'Usage limit reached (25 min / hour). Try again in {wait // 60}m {wait % 60}s.',
+            'error':        f'Usage limit reached (25 min / hour). Try again in {wait // 60}m {wait % 60}s.',
             'rate_limited': True,
             'wait_seconds': wait,
-            'resets_at': resets
+            'resets_at':    resets
         }), 429
     return None
 
@@ -97,7 +96,6 @@ def static_files(path):
 # ── Anthropic (Claude) route ──────────────────────────────
 @app.route('/api/analyze', methods=['POST'])
 def analyze():
-    # Rate-limit check
     blocked = _check_limit()
     if blocked:
         return blocked
@@ -116,19 +114,27 @@ def analyze():
             json=request.get_json(),
             timeout=60
         )
-        elapsed = time.time() - start
-        _record_usage(ip, elapsed)
+        _record_usage(ip, time.time() - start)
         return jsonify(response.json())
     except Exception as e:
-        elapsed = time.time() - start
-        _record_usage(ip, elapsed)
+        _record_usage(ip, time.time() - start)
         return jsonify({'error': str(e)}), 500
 
 
-# ── Gemini 2.5 Flash Image generation ────────────────────
-@app.route('/api/generate-image-gemini', methods=['POST'])
+# ── FLUX.1 Dev image generation (replaces Gemini) ────────
+#
+# OLD: POST https://generativelanguage.googleapis.com/...gemini-2.5-flash-image
+#      Auth: ?key=GOOGLE_KEY
+#      Body: { contents, generationConfig: { responseModalities } }
+#      Response: candidates[0].content.parts[].inlineData.data  (base64)
+#
+# NEW: POST https://fal.run/fal-ai/flux/dev
+#      Auth: Authorization: Key FAL_KEY
+#      Body: { prompt, image_size, num_images, num_inference_steps, guidance_scale }
+#      Response: images[0].url  (we fetch → base64 to keep frontend unchanged)
+#
+@app.route('/api/generate-image-gemini', methods=['POST'])   # endpoint name kept — frontend unchanged
 def generate_image_gemini():
-    # Rate-limit check
     blocked = _check_limit()
     if blocked:
         return blocked
@@ -140,56 +146,70 @@ def generate_image_gemini():
         data   = request.get_json()
         prompt = data.get('prompt', '')
 
-        MODEL_ID = 'gemini-2.5-flash-image'
-        url = f'https://generativelanguage.googleapis.com/v1beta/models/{MODEL_ID}:generateContent?key={GOOGLE_KEY}'
+        print(f'\n[FLUX] Prompt: {prompt[:120]}...')
 
-        body = {
-            'contents': [{'parts': [{'text': prompt}]}],
-            'generationConfig': {
-                'responseModalities': ['TEXT', 'IMAGE']
-            }
-        }
-
-        print(f'\n[Gemini] Prompt: {prompt[:100]}...')
-
-        response = requests.post(
-            url,
-            headers={'Content-Type': 'application/json'},
-            json=body,
-            timeout=45
+        # ── Step 1: Call FLUX.1 Dev on fal.ai ────────────
+        flux_response = requests.post(
+            'https://fal.run/fal-ai/flux/dev',
+            headers={
+                'Content-Type':  'application/json',
+                'Authorization': f'Key {FAL_KEY}'
+            },
+            json={
+                'prompt':                prompt,
+                'image_size':            'square_hd',   # 1024×1024
+                'num_images':            1,
+                'num_inference_steps':   28,             # FLUX Dev default
+                'guidance_scale':        3.5,            # FLUX Dev default
+                'enable_safety_checker': True
+            },
+            timeout=120    # FLUX Dev can take up to 90s on cold start
         )
 
-        result = response.json()
-        print(f'[Gemini] HTTP {response.status_code}')
+        print(f'[FLUX] HTTP {flux_response.status_code}')
 
-        elapsed = time.time() - start
-        _record_usage(ip, elapsed)
+        if flux_response.status_code != 200:
+            err = flux_response.json().get('detail') or f'FLUX API error {flux_response.status_code}'
+            _record_usage(ip, time.time() - start)
+            return jsonify({'error': err}), flux_response.status_code
 
-        if response.status_code != 200:
-            err = result.get('error', {}).get('message') or f'HTTP {response.status_code}'
-            return jsonify({'error': err}), response.status_code
+        flux_result = flux_response.json()
 
-        try:
-            parts = result['candidates'][0]['content']['parts']
-            for part in parts:
-                if 'inlineData' in part:
-                    return jsonify({
-                        'imageData': part['inlineData']['data'],
-                        'mimeType':  part['inlineData'].get('mimeType', 'image/png')
-                    })
-            return jsonify({'error': 'No image in response. Check billing.'}), 500
-        except (KeyError, IndexError) as e:
-            return jsonify({'error': f'Unexpected response: {e}'}), 500
+        # ── Step 2: Extract image URL from FLUX response ──
+        # FLUX response: { "images": [{ "url": "https://...", "content_type": "image/jpeg" }], ... }
+        images = flux_result.get('images', [])
+        if not images:
+            _record_usage(ip, time.time() - start)
+            return jsonify({'error': 'FLUX returned no images. Check your FAL_KEY and quota.'}), 500
+
+        image_url    = images[0]['url']
+        content_type = images[0].get('content_type', 'image/jpeg')
+
+        # ── Step 3: Fetch image → base64 ─────────────────
+        # Frontend expects { imageData: base64string, mimeType: string }
+        # so we download the image and convert — zero frontend changes needed
+        img_response = requests.get(image_url, timeout=30)
+        if img_response.status_code != 200:
+            _record_usage(ip, time.time() - start)
+            return jsonify({'error': 'Failed to download generated image from FLUX.'}), 500
+
+        image_b64 = base64.b64encode(img_response.content).decode('utf-8')
+
+        _record_usage(ip, time.time() - start)
+
+        # Same response shape as Gemini — frontend unchanged
+        return jsonify({
+            'imageData': image_b64,
+            'mimeType':  content_type
+        })
 
     except requests.exceptions.Timeout:
-        elapsed = time.time() - start
-        _record_usage(ip, elapsed)
-        print('[Gemini] Request timed out after 45s')
-        return jsonify({'error': 'Gemini timed out — model may be overloaded, try again'}), 504
+        _record_usage(ip, time.time() - start)
+        print('[FLUX] Request timed out')
+        return jsonify({'error': 'FLUX timed out — model may be busy, try again'}), 504
     except Exception as e:
-        elapsed = time.time() - start
-        _record_usage(ip, elapsed)
-        print(f'[Gemini] Exception: {e}')
+        _record_usage(ip, time.time() - start)
+        print(f'[FLUX] Exception: {e}')
         return jsonify({'error': str(e)}), 500
 
 
