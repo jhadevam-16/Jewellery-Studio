@@ -1,5 +1,6 @@
 import os
 import time
+import json
 import base64
 import requests
 from flask import Flask, request, jsonify, send_from_directory
@@ -12,7 +13,7 @@ app = Flask(__name__, static_folder='public')
 CORS(app)
 
 ANTHROPIC_KEY = os.getenv('ANTHROPIC_KEY')
-FAL_KEY       = os.getenv('FAL_KEY')        # fal.ai API key — replaces GOOGLE_KEY
+FAL_KEY       = os.getenv('FAL_KEY')
 
 # ── Rate-limit config ─────────────────────────────────────
 WINDOW_SECONDS = 3600    # 1-hour rolling window
@@ -67,7 +68,7 @@ def _check_limit():
     return None
 
 
-# ── Usage status endpoint (polled by frontend) ───────────
+# ── Usage status endpoint (polled by frontend) ────────────
 @app.route('/api/usage-status')
 def usage_status():
     ip   = _get_ip()
@@ -83,7 +84,7 @@ def usage_status():
     })
 
 
-# ── Serve frontend ────────────────────────────────────────
+# ── Serve frontend ─────────────────────────────────────────
 @app.route('/')
 def index():
     return send_from_directory('public', 'index.html')
@@ -93,7 +94,13 @@ def static_files(path):
     return send_from_directory('public', path)
 
 
-# ── Anthropic (Claude) route ──────────────────────────────
+# ── Anthropic (Claude) route — STREAMING ──────────────────
+#
+# Uses stream=True so Anthropic sends tokens as they arrive.
+# We accumulate the full text server-side and return the same
+# JSON shape the frontend already expects — zero frontend changes.
+# This eliminates read timeouts on long prompts entirely.
+#
 @app.route('/api/analyze', methods=['POST'])
 def analyze():
     blocked = _check_limit()
@@ -104,35 +111,114 @@ def analyze():
     start = time.time()
 
     try:
-        response = requests.post(
+        payload = request.get_json()
+
+        # Force streaming on — frontend payload may or may not include it
+        payload['stream'] = True
+
+        # Cap max_tokens to avoid over-allocating (6 ideas × ~200 word prompts ≈ 1800 tokens)
+        payload.setdefault('max_tokens', 2500)
+
+        print(f'\n[CLAUDE] Starting streaming request (max_tokens={payload["max_tokens"]})')
+
+        upstream = requests.post(
             'https://api.anthropic.com/v1/messages',
             headers={
                 'Content-Type':      'application/json',
                 'x-api-key':         ANTHROPIC_KEY,
                 'anthropic-version': '2023-06-01'
             },
-            json=request.get_json(),
-            timeout=60
+            json=payload,
+            stream=True,
+            timeout=180    # 3-minute socket timeout — stream keeps connection alive
         )
+
+        if upstream.status_code != 200:
+            # Anthropic returned an error before streaming started
+            _record_usage(ip, time.time() - start)
+            try:
+                err_body = upstream.json()
+            except Exception:
+                err_body = {'error': f'Anthropic HTTP {upstream.status_code}'}
+            print(f'[CLAUDE] Non-200 from Anthropic: {upstream.status_code}')
+            return jsonify(err_body), upstream.status_code
+
+        # ── Accumulate SSE stream ──────────────────────────
+        full_text    = ''
+        input_tokens = 0
+        output_tokens = 0
+
+        for raw_line in upstream.iter_lines():
+            if not raw_line:
+                continue
+
+            line = raw_line.decode('utf-8') if isinstance(raw_line, bytes) else raw_line
+
+            if not line.startswith('data: '):
+                continue
+
+            data_str = line[6:]  # strip "data: " prefix
+
+            if data_str.strip() == '[DONE]':
+                break
+
+            try:
+                event = json.loads(data_str)
+            except json.JSONDecodeError:
+                continue
+
+            etype = event.get('type', '')
+
+            if etype == 'content_block_delta':
+                delta = event.get('delta', {})
+                if delta.get('type') == 'text_delta':
+                    chunk = delta.get('text', '')
+                    full_text += chunk
+
+            elif etype == 'message_start':
+                usage = event.get('message', {}).get('usage', {})
+                input_tokens = usage.get('input_tokens', 0)
+
+            elif etype == 'message_delta':
+                usage = event.get('usage', {})
+                output_tokens = usage.get('output_tokens', 0)
+
+            elif etype == 'error':
+                # Anthropic sent an error mid-stream
+                err_msg = event.get('error', {}).get('message', 'Unknown stream error')
+                _record_usage(ip, time.time() - start)
+                print(f'[CLAUDE] Stream error: {err_msg}')
+                return jsonify({'error': err_msg}), 500
+
+        elapsed = time.time() - start
+        _record_usage(ip, elapsed)
+
+        print(f'[CLAUDE] Stream complete — {len(full_text)} chars, '
+              f'{input_tokens} in / {output_tokens} out tokens, {elapsed:.1f}s')
+
+        # Return in the exact same shape the frontend already expects
+        return jsonify({
+            'content': [{'type': 'text', 'text': full_text}],
+            'usage':   {'input_tokens': input_tokens, 'output_tokens': output_tokens}
+        })
+
+    except requests.exceptions.Timeout:
         _record_usage(ip, time.time() - start)
-        return jsonify(response.json())
+        print('[CLAUDE] Timeout waiting for Anthropic stream')
+        return jsonify({'error': 'Claude API timed out — please try again'}), 504
+
+    except requests.exceptions.ConnectionError as e:
+        _record_usage(ip, time.time() - start)
+        print(f'[CLAUDE] Connection error: {e}')
+        return jsonify({'error': 'Could not connect to Claude API — check your network'}), 502
+
     except Exception as e:
         _record_usage(ip, time.time() - start)
+        print(f'[CLAUDE] Unexpected error: {e}')
         return jsonify({'error': str(e)}), 500
 
 
-# ── FLUX.1 Dev image generation (replaces Gemini) ────────
-#
-# OLD: POST https://generativelanguage.googleapis.com/...gemini-2.5-flash-image
-#      Auth: ?key=GOOGLE_KEY
-#      Body: { contents, generationConfig: { responseModalities } }
-#      Response: candidates[0].content.parts[].inlineData.data  (base64)
-#
-# NEW: POST https://fal.run/fal-ai/flux/dev
-#      Auth: Authorization: Key FAL_KEY
-#      Body: { prompt, image_size, num_images, num_inference_steps, guidance_scale }
-#      Response: images[0].url  (we fetch → base64 to keep frontend unchanged)
-#
+# ── FLUX.1 Dev image generation ───────────────────────────
 @app.route('/api/generate-image-gemini', methods=['POST'])   # endpoint name kept — frontend unchanged
 def generate_image_gemini():
     blocked = _check_limit()
@@ -146,9 +232,9 @@ def generate_image_gemini():
         data   = request.get_json()
         prompt = data.get('prompt', '')
 
-        print(f'\n[FLUX] Prompt: {prompt[:120]}...')
+        print(f'\n[FLUX] Prompt ({len(prompt)} chars): {prompt[:120]}...')
 
-        # ── Step 1: Call FLUX.1 Dev on fal.ai ────────────
+        # ── Step 1: Call FLUX.1 Dev on fal.ai ─────────────
         flux_response = requests.post(
             'https://fal.run/fal-ai/flux/dev',
             headers={
@@ -159,8 +245,8 @@ def generate_image_gemini():
                 'prompt':                prompt,
                 'image_size':            'square_hd',   # 1024×1024
                 'num_images':            1,
-                'num_inference_steps':   28,             # FLUX Dev default
-                'guidance_scale':        3.5,            # FLUX Dev default
+                'num_inference_steps':   50,             # raised from 28 — sharper detail
+                'guidance_scale':        6.0,            # raised from 3.5 — more prompt-faithful
                 'enable_safety_checker': True
             },
             timeout=120    # FLUX Dev can take up to 90s on cold start
@@ -175,19 +261,16 @@ def generate_image_gemini():
 
         flux_result = flux_response.json()
 
-        # ── Step 2: Extract image URL from FLUX response ──
-        # FLUX response: { "images": [{ "url": "https://...", "content_type": "image/jpeg" }], ... }
+        # ── Step 2: Extract image URL ──────────────────────
         images = flux_result.get('images', [])
         if not images:
             _record_usage(ip, time.time() - start)
-            return jsonify({'error': 'FLUX returned no images. Check your FAL_KEY and quota.'}), 500
+            return jsonify({'error': 'FLUX returned no images — check your FAL_KEY and quota.'}), 500
 
         image_url    = images[0]['url']
         content_type = images[0].get('content_type', 'image/jpeg')
 
-        # ── Step 3: Fetch image → base64 ─────────────────
-        # Frontend expects { imageData: base64string, mimeType: string }
-        # so we download the image and convert — zero frontend changes needed
+        # ── Step 3: Fetch image → base64 ──────────────────
         img_response = requests.get(image_url, timeout=30)
         if img_response.status_code != 200:
             _record_usage(ip, time.time() - start)
@@ -195,9 +278,10 @@ def generate_image_gemini():
 
         image_b64 = base64.b64encode(img_response.content).decode('utf-8')
 
-        _record_usage(ip, time.time() - start)
+        elapsed = time.time() - start
+        _record_usage(ip, elapsed)
+        print(f'[FLUX] Done — image delivered in {elapsed:.1f}s')
 
-        # Same response shape as Gemini — frontend unchanged
         return jsonify({
             'imageData': image_b64,
             'mimeType':  content_type
@@ -207,6 +291,7 @@ def generate_image_gemini():
         _record_usage(ip, time.time() - start)
         print('[FLUX] Request timed out')
         return jsonify({'error': 'FLUX timed out — model may be busy, try again'}), 504
+
     except Exception as e:
         _record_usage(ip, time.time() - start)
         print(f'[FLUX] Exception: {e}')
