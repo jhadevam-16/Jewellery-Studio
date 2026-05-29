@@ -260,7 +260,7 @@ body::before{content:'';display:block;height:3px;background:linear-gradient(90de
   <header class="header">
     <div class="header-eyebrow">AI · Product Lab</div>
     <h1>Design Innovation Studio</h1>
-    <p>Upload a product photo — Claude analyzes it, Gemini 2.5 Flash visualizes the top pick</p>
+    <p>Upload a product photo — Claude analyzes it, FLUX.1 Dev visualizes the top pick</p>
     <div class="header-rule"><span>◆</span></div>
   </header>
 
@@ -321,7 +321,7 @@ body::before{content:'';display:block;height:3px;background:linear-gradient(90de
     <!-- Model info -->
     <div class="model-info">
       <div class="model-dot"></div>
-      <div class="model-text"><strong>Gemini 2.5 Flash Image</strong> · gemini-2.5-flash-image · $0.39 per image · Paid tier required</div>
+      <div class="model-text"><strong>FLUX.1 Dev</strong> · fal-ai/flux/dev · Ultra-precise text-to-image generation</div>
     </div>
 
     <div class="divider"></div>
@@ -727,41 +727,109 @@ Push creative boundaries while staying producible:
 IMPORTANT: Label each idea clearly as [TREND], [STRUCTURAL INNOVATION], or [MATERIAL INNOVATION] in the name or modification field so the user knows which lens it came from.
 
 ═══════════════════════════════════════════
-PHASE 5 — WRITE THE imagen_prompt
+PHASE 5 — WRITE THE imagen_prompt FOR FLUX
 ═══════════════════════════════════════════
-The imagen_prompt is sent directly to Gemini image generation. It must be extremely precise.
+CRITICAL CONTEXT: The imagen_prompt is sent to FLUX.1 — a pure text-to-image AI that has NEVER seen your product photo. It cannot reference, copy, or edit the original image. It must reconstruct the ENTIRE product from your words alone. Every visual detail you omit will be invented randomly by FLUX. Every detail you include will be rendered precisely.
 
-FOR SINGLE PRODUCTS — use this template:
-[PRODUCT TYPE IN CAPS]. [Exact physical form and shape]. [Base material]. [All original design elements]. [Specific modification applied in detail]. Luxury ecommerce product photography. Pure white background. Professional studio lighting with subtle shadows. No hands. No body parts. No model. Product only. Macro 8K sharp detail. Premium catalogue quality.
+THIS MEANS: Your prompt must be so complete and specific that a blind master jeweller (or product craftsman) could build the EXACT modified product from your words alone, with ZERO ambiguity.
 
-FOR JEWELLERY SETS — use this template:
-JEWELLERY SET. [List every piece: e.g. necklace, pair of earrings, bracelet]. [Spatial arrangement: e.g. necklace at top center, earrings flanking it, bracelet below]. [Base material for all pieces]. [Shared gemstone or design element]. [Specific modification applied consistently across ALL pieces]. All pieces visible and complete. No cropping. Luxury flat-lay ecommerce photography. Pure white background. Studio lighting. Macro 8K.
+══════════════════════════════════════════
+FLUX PROMPT ARCHITECTURE — MANDATORY ORDER
+══════════════════════════════════════════
+Every imagen_prompt MUST follow this exact 8-block structure, in this order, with no blocks skipped:
 
-FOR LOOSE GEMSTONES:
-LOOSE GEMSTONE. [Exact cut shape]. [Gemstone type]. [Colour and clarity]. [Modification]. Professional gemstone photography. White background. Studio lighting with refractive light dispersion. No hands. 8K macro detail.
+BLOCK 1 — SUBJECT DECLARATION (what FLUX renders first)
+Start with the product type in ALL CAPS, then immediately state count and overall form.
+Example: "GOLD BRACELET. A single women's chain bracelet."
+Example: "JEWELLERY SET. Three-piece set: one necklace, two matching stud earrings."
+Example: "LOOSE GEMSTONE. One oval-cut tanzanite gemstone, unset."
 
-FOR BULLION BARS:
-[BAR TYPE IN CAPS]. [Exact dimensions and form]. [Material and purity]. [All engravings/text visible]. [Modification to surface design or finish]. Professional bullion product photography. White background. Studio lighting. No hands. 8K.
+BLOCK 2 — MATERIAL STACK (metal + stone + surface, most important for realism)
+State every material layer from outermost to innermost:
+- Primary metal: "18k yellow gold" / "925 sterling silver" / "14k rose gold" / "platinum"
+- Surface finish: "high-mirror polish" / "satin brushed finish" / "hammered texture" / "matte black rhodium plating"
+- Secondary material (if any): "set with natural blue sapphires" / "inlaid with white mother-of-pearl"
+- Stone details: cut + shape + colour + quantity: "six round brilliant-cut white diamonds, each approx 2mm diameter, prong-set"
+NEVER write just "gold" — always write "18k yellow gold with mirror-polish finish"
+NEVER write just "diamonds" — always write "round brilliant-cut white diamonds, G-colour, VS clarity"
 
-FOR DECORATIVE/LUXURY GIFTS:
-[PRODUCT TYPE IN CAPS]. [Full structure description]. [Material]. [Modification]. Luxury gift product photography. White background. Premium studio lighting. Elegant composition. 8K.
+BLOCK 3 — STRUCTURAL ANATOMY (shape, geometry, dimensions)
+Describe the exact 3D form as if measuring it:
+- Overall shape and silhouette: "oval hoop", "flat rectangular bar", "tapered teardrop pendant"
+- Link/component breakdown: "formed from 4mm round cable links", "with a 12mm circular centre medallion"
+- Key structural features: "lobster clasp on right side", "six-claw solitaire setting", "double-row tennis design"
+- Approximate scale: "approximately 18cm in length, 6mm wide chain"
+For SETS: describe each piece separately with its own anatomy.
 
-FOR FASHION:
-[PRODUCT TYPE IN CAPS]. [Garment or accessory description]. [Material / fabric]. [Colour]. [Modification]. Fashion ecommerce product photography. Clean white or neutral background. Professional lighting. 8K.
+BLOCK 4 — THE MODIFICATION (the only thing that differs from the original — be surgical)
+This is the single most important block. State EXACTLY what changed, EXACTLY what stayed the same.
+Format: "MODIFICATION: [Original element] has been replaced with [New element]. All other design elements remain identical to the original."
+Be specific about the modified component's new material, finish, shape, size, position, and colour.
+Bad example: "with enamel accents" — FLUX will guess where and what colour.
+Good example: "MODIFICATION: The smooth polished surface of each link has been replaced with royal blue guilloche enamel fill, covering 80% of each link face, with a thin 1mm gold border remaining around the enamel edge. Clasp remains original lobster-claw style in 18k yellow gold."
 
-FOR ANY OTHER PRODUCT (car, shoe, pen, watch, tech gadget, musical instrument, etc.):
-[PRODUCT TYPE IN CAPS]. [Exact form, shape and structure]. [Primary material and colour]. [All visible design details]. [Specific modification applied]. Premium commercial product photography. Pure white or studio gradient background. Professional studio lighting. No hands. No people. Product only. 8K sharp detail. Luxury catalogue quality.
+BLOCK 5 — SPATIAL ARRANGEMENT (where objects sit in the frame)
+FLUX needs to know where to place things. Without this, it centres randomly.
+Single product: "Presented lying flat, centred in frame, horizontal orientation, slight 15-degree angle."
+Pendant: "Chain draped in a loose U-shape, pendant hanging at centre-bottom of chain."
+Set: "Necklace positioned at top-centre. Left earring at mid-left. Right earring at mid-right. Bracelet at bottom-centre. All pieces evenly spaced with 2cm gaps between items."
+Ring: "Ring positioned upright, face-on, slight 10-degree tilt toward camera to show setting detail."
+
+BLOCK 6 — LIGHTING + PHOTOGRAPHY STYLE (controls realism and sharpness)
+Always use: "Professional luxury ecommerce product photography."
+Then specify: "Three-point studio lighting: key light from upper-left at 45 degrees, fill light from right, soft back-light creating subtle rim glow on metal edges."
+Then add material-specific lighting:
+- For gold/silver: "Lighting calibrated to show metallic specular highlights and reflections without blown-out overexposure."
+- For gemstones: "Light angled to maximise internal refractive sparkle and fire within the stone."
+- For enamel: "Even diffused lighting to show true enamel colour saturation without glare."
+- For matte/brushed: "Soft diffused lighting to preserve matte surface character without hotspots."
+
+BLOCK 7 — BACKGROUND + SURFACE (sets the scene)
+Always choose ONE of these:
+- "Pure white background (#FFFFFF), seamless, no shadows visible." — cleanest catalogue look
+- "Pure white background with a soft, natural drop shadow directly beneath the product, shadow radius 30px, 20% opacity." — most realistic
+- "Light warm grey gradient background (#F5F5F0 to #FFFFFF), seamless." — premium editorial
+For flat-lay sets: "Photographed from directly overhead (bird's-eye view, 90 degrees), flat white surface."
+
+BLOCK 8 — QUALITY + NEGATIVE CONSTRAINTS (what FLUX must NOT hallucinate)
+Always end with: "Ultra-sharp macro detail. 8K resolution. No hands. No body parts. No model. No mannequin. No props. No jewellery stand unless part of original. No extra products. No text overlays. No watermarks. Product fills 75% of frame. Nothing cropped."
+Add product-specific negatives:
+- For sets: "All [X] pieces fully visible, none cropped, none overlapping."
+- For gemstones: "Stone fully visible, not mounted, no setting, no prongs."
+- For bullion bars: "Bar fully visible, all engravings sharp and readable."
+
+══════════════════════════════════════════
+WORKED EXAMPLES — STUDY THESE CAREFULLY
+══════════════════════════════════════════
+
+EXAMPLE A — Gold bracelet with enamel modification:
+"GOLD BRACELET. A single women's chain bracelet. MATERIAL: 18k yellow gold with high-mirror polish finish. No gemstones. STRUCTURE: Formed from 36 individual oval cable links, each link 6mm wide by 4mm tall, connected end-to-end. Standard lobster-claw clasp, 10mm long, attached at one end. Total length approximately 18cm, width 6mm. MODIFICATION: The smooth polished face of every link has been filled with cobalt blue guilloché enamel, covering the entire inner face of each link. A 0.8mm polished gold border remains visible around the edge of each link. Clasp remains in unmodified 18k yellow gold mirror polish. All link connections remain gold. ARRANGEMENT: Bracelet arranged in a loose oval coil, lying flat, centred in frame, slight 20-degree diagonal orientation. LIGHTING: Professional luxury ecommerce photography. Three-point studio lighting, key light upper-left at 45 degrees. Lighting calibrated to show metallic specular highlights and true cobalt blue enamel saturation without glare. BACKGROUND: Pure white background with a soft natural drop shadow beneath the bracelet, 20% opacity. QUALITY: Ultra-sharp macro detail, 8K. No hands. No body parts. No model. No extra products. No text overlays. Product fills 75% of frame. Nothing cropped."
+
+EXAMPLE B — Three-piece jewellery set with gemstone swap:
+"JEWELLERY SET. Three-piece set: one pendant necklace, one pair of stud earrings (two studs). MATERIAL: All pieces in 18k rose gold with high-mirror polish. Centre stone in each piece: natural oval-cut pink morganite, medium pastel pink colour, eye-clean clarity. STRUCTURE: Necklace — delicate 1mm cable chain 45cm length with a teardrop bezel-set morganite pendant 12mm tall by 8mm wide. Earrings — two round bezel-set morganite studs, each 6mm diameter, with butterfly push-back post fastening. MODIFICATION: The original round white diamond centre stones in all three pieces have been replaced with oval-cut pink morganite gemstones. Setting style (bezel) and rose gold metal colour unchanged across all pieces. ARRANGEMENT: Flat-lay, photographed from directly overhead. Necklace at top-centre of frame, chain forming a flat U-shape. Left earring at mid-left. Right earring at mid-right. All three pieces on a single horizontal plane, evenly spaced. LIGHTING: Professional luxury ecommerce flat-lay photography. Soft diffused overhead lighting, even illumination across all three pieces. Lighting angled to reveal internal refractive glow in all three morganite stones. BACKGROUND: Pure white background (#FFFFFF), seamless, no shadows. QUALITY: Ultra-sharp 8K macro. No hands. No body parts. No model. All three pieces fully visible and uncropped. No extra products. Product group fills 80% of frame."
+
+EXAMPLE C — Silver bullion bar with surface modification:
+"SILVER BULLION BAR. One rectangular silver bullion bar. MATERIAL: 999 fine silver, satin brushed finish on face. STRUCTURE: Standard rectangular bar form, approximately 110mm long by 50mm wide by 10mm thick. Bevelled edges on all four sides. Engraved text on face reading '1 OZ FINE SILVER 999' in sans-serif capital letters, 4mm tall. Bar brand logo stamp at top-centre, 15mm diameter circular motif. Bar serial number engraved along bottom edge in 2mm numerals. MODIFICATION: The standard satin brushed silver face has been replaced with a black ruthenium PVD-coated face, full coverage, creating a matte jet-black surface. All engraved text and logo remain, now appearing as bright silver recessed engravings against the black face — creating a two-tone contrast effect. All four bevelled edges remain in uncoated mirror-polished silver. Reverse face unchanged. ARRANGEMENT: Bar positioned face-up, lying flat and horizontal, centred in frame, slight 5-degree angle for depth perspective. LIGHTING: Professional bullion product photography. Studio lighting from upper-left, angled to show contrast between matte black face and polished silver bevels. All engraved text must be clearly legible. BACKGROUND: Pure white background with subtle soft drop shadow beneath bar, 15% opacity. QUALITY: Ultra-sharp 8K. No hands. No gloves. No model. All engravings fully visible and sharp. Bar fully uncropped. No extra products."
+
+══════════════════════════════════════════
+FLUX PROMPT QUALITY RULES — NON-NEGOTIABLE
+══════════════════════════════════════════
+1. NEVER use vague words: "beautiful", "elegant", "luxurious", "stunning", "enhanced" — FLUX ignores adjectives. Use precise nouns and measurements.
+2. NEVER write "similar to the original" or "as seen in the image" — FLUX has no image reference.
+3. ALWAYS specify metal karat: not "gold" but "18k yellow gold" or "14k white gold".
+4. ALWAYS specify gemstone cut + colour + size: not "sapphire" but "oval-cut blue sapphire, 8x6mm, vivid cornflower blue, bezel-set".
+5. ALWAYS specify surface finish: not "silver" but "sterling silver with brushed satin finish".
+6. For sets: ALWAYS name every individual piece and its quantity.
+7. The modification block must be surgical: name the original element, name the replacement, state what is unchanged.
+8. Minimum prompt length: 120 words. Shorter prompts produce inconsistent FLUX output.
 
 ═══════════════════════════════════════════
 LUXURY OUTPUT QUALITY RULES
 ═══════════════════════════════════════════
-- Preserve composition and layout of original image
-- Maintain luxury catalogue photography style
-- Maintain proportions and scale
-- Maintain metallic texture realism
-- Maintain gemstone reflections and refractions
-- Maintain shadows and depth
-- If set: maintain matching symmetry across all pieces
+- Every imagen_prompt must be fully self-contained — no references to "original", "as shown", "similar to"
+- Maintain metallic texture realism through specific finish words (mirror-polish, brushed, hammered, matte)
+- Maintain gemstone realism through cut + colour + setting specifics
+- If set: every piece described separately with its own anatomy in Block 3
 - No hallucinated extra products
 - No aggressive cropping
 - Keep all objects fully visible
@@ -773,7 +841,7 @@ CRITICAL FORMAT RULES:
 4. Exactly 6 ideas. Set top:true for the single best idea only
 
 JSON structure:
-{"original":"[product category] — [complete description of all objects, materials, design details, and spatial arrangement for sets]","ideas":[{"name":"short idea name","modification":"precise description of exactly what changes","why":"commercial reason this sells","visual":"2-3 sentences describing the finished modified piece as a jeweler or product designer would brief a factory","imagen_prompt":"[PRODUCT TYPE IN CAPS]. [complete precise prompt following the template above]","top":false}]}
+{"original":"[product category] — [complete description of all objects, materials, design details, and spatial arrangement for sets]","ideas":[{"name":"short idea name","modification":"precise description of exactly what changes","why":"commercial reason this sells","visual":"2-3 sentences describing the finished modified piece as a jeweler or product designer would brief a factory","imagen_prompt":"[PRODUCT TYPE IN CAPS]. [complete 8-block FLUX prompt following the architecture above — minimum 120 words]","top":false}]}
 ${focus?'Focus modifications on: '+focus:''}`;
 
   const imageBlock = pastedUrl
@@ -808,7 +876,7 @@ ${focus?'Focus modifications on: '+focus:''}`;
   lstep.textContent='Takes ~20 seconds';
   document.getElementById('progressWrap').classList.add('on');
   document.getElementById('progressFill').style.width='10%';
-  document.getElementById('progressLabel').textContent='Sending top pick to Gemini...';
+  document.getElementById('progressLabel').textContent='Sending top pick to FLUX.1 Dev...';
 
   renderSkeleton(parsed, topPick);
 
