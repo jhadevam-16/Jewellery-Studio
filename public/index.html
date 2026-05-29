@@ -792,7 +792,7 @@ Always choose ONE of these:
 For flat-lay sets: "Photographed from directly overhead (bird's-eye view, 90 degrees), flat white surface."
 
 BLOCK 8 — QUALITY + NEGATIVE CONSTRAINTS (what FLUX must NOT hallucinate)
-Always end with: "Ultra-sharp macro detail. 8K resolution. No hands. No body parts. No model. No mannequin. No props. No jewellery stand unless part of original. No extra products. No text overlays. No watermarks. Product fills 75% of frame. Nothing cropped."
+Always end with: "RAW photo. Tack-sharp focus. f/8 aperture. Studio macro lens. Ultra-fine detail. 8K resolution. Photorealistic. Hyperrealistic product photography. No blur. No soft focus. No bokeh. No hands. No body parts. No model. No mannequin. No props. No jewellery stand. No extra products. No text overlays. No watermarks. Product fills 75% of frame. Nothing cropped."
 Add product-specific negatives:
 - For sets: "All [X] pieces fully visible, none cropped, none overlapping."
 - For gemstones: "Stone fully visible, not mounted, no setting, no prongs."
@@ -811,6 +811,9 @@ EXAMPLE B — Three-piece jewellery set with gemstone swap:
 EXAMPLE C — Silver bullion bar with surface modification:
 "SILVER BULLION BAR. One rectangular silver bullion bar. MATERIAL: 999 fine silver, satin brushed finish on face. STRUCTURE: Standard rectangular bar form, approximately 110mm long by 50mm wide by 10mm thick. Bevelled edges on all four sides. Engraved text on face reading '1 OZ FINE SILVER 999' in sans-serif capital letters, 4mm tall. Bar brand logo stamp at top-centre, 15mm diameter circular motif. Bar serial number engraved along bottom edge in 2mm numerals. MODIFICATION: The standard satin brushed silver face has been replaced with a black ruthenium PVD-coated face, full coverage, creating a matte jet-black surface. All engraved text and logo remain, now appearing as bright silver recessed engravings against the black face — creating a two-tone contrast effect. All four bevelled edges remain in uncoated mirror-polished silver. Reverse face unchanged. ARRANGEMENT: Bar positioned face-up, lying flat and horizontal, centred in frame, slight 5-degree angle for depth perspective. LIGHTING: Professional bullion product photography. Studio lighting from upper-left, angled to show contrast between matte black face and polished silver bevels. All engraved text must be clearly legible. BACKGROUND: Pure white background with subtle soft drop shadow beneath bar, 15% opacity. QUALITY: Ultra-sharp 8K. No hands. No gloves. No model. All engravings fully visible and sharp. Bar fully uncropped. No extra products."
 
+EXAMPLE D — Marquise ring with halo (the exact product type in your screenshot):
+"RING. A single ladies cocktail ring. MATERIAL: Platinum band with high-mirror polish. Centre stone: marquise-cut vivid royal blue sapphire, approximately 12mm long by 6mm wide, VS clarity, deep saturated colour, prong-set with six pointed prongs. Halo: 16 round brilliant-cut white diamonds, each 2mm diameter, G-colour VS1 clarity, bead-set in a single row encircling the sapphire, forming a pointed oval halo shape that mirrors the marquise outline. Shoulder detail: two baguette-cut white diamonds, each 4mm long, channel-set flat into each shoulder of the band. STRUCTURE: Tapered band, 2.5mm wide at base narrowing to 1.8mm at shoulder junction, slightly domed profile. Total ring face height approximately 20mm from band base to sapphire tip. Prong tips polished and rounded. MODIFICATION: [Your specific change here]. ARRANGEMENT: Ring positioned upright and face-forward, slight 10-degree forward tilt toward camera to show the full halo and sapphire face. Band curves downward and out of frame at bottom. Ring centred horizontally in frame. LIGHTING: Professional luxury jewellery macro photography. Key light from upper-left at 45 degrees. Rim light from behind to create specular highlight along platinum band edges. Dedicated sparkle light from right at 30 degrees angled directly into the diamond halo to trigger maximum brilliance and fire in each stone. Sapphire lit to reveal deep blue internal saturation. BACKGROUND: Pure white background (#FFFFFF), seamless. Soft natural drop shadow beneath ring base, 15% opacity, 20px radius. QUALITY: RAW photo. Tack-sharp focus. f/8 aperture. Studio macro lens. Ultra-fine detail. 8K resolution. Photorealistic. Hyperrealistic product photography. No blur. No soft focus. No bokeh. No hands. No body parts. No model. All diamonds showing individual sparkle points. Sapphire colour fully saturated, not washed out. Nothing cropped."
+
 ══════════════════════════════════════════
 FLUX PROMPT QUALITY RULES — NON-NEGOTIABLE
 ══════════════════════════════════════════
@@ -822,6 +825,8 @@ FLUX PROMPT QUALITY RULES — NON-NEGOTIABLE
 6. For sets: ALWAYS name every individual piece and its quantity.
 7. The modification block must be surgical: name the original element, name the replacement, state what is unchanged.
 8. Minimum prompt length: 120 words. Shorter prompts produce inconsistent FLUX output.
+9. ALWAYS end every prompt with the full sharpness token string from Block 8 — these tokens ("RAW photo", "tack-sharp focus", "f/8 aperture") are what tell FLUX to render in macro detail mode. Missing them = blurry output.
+10. FOR RINGS specifically: always describe the halo diamond count, individual diamond sizes, prong style, and band taper — FLUX needs this to render each stone individually rather than as a blurry cluster.
 
 ═══════════════════════════════════════════
 LUXURY OUTPUT QUALITY RULES
