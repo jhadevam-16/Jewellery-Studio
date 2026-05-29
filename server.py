@@ -234,22 +234,35 @@ def generate_image_gemini():
 
         print(f'\n[FLUX] Prompt ({len(prompt)} chars): {prompt[:120]}...')
 
-        # ── Step 1: Call FLUX.1 Dev on fal.ai ─────────────
+        # ── Step 1: Call FLUX.1 Pro on fal.ai ────────────
+        #
+        # Using flux-pro/v1.1 — sharper and more photorealistic than Dev.
+        # negative_prompt suppresses the blur/soft-focus artefacts Dev produces.
+        # guidance_scale 7.5 = strict prompt-following for precise product detail.
+        #
         flux_response = requests.post(
-            'https://fal.run/fal-ai/flux/dev',
+            'https://fal.run/fal-ai/flux-pro/v1.1',
             headers={
                 'Content-Type':  'application/json',
                 'Authorization': f'Key {FAL_KEY}'
             },
             json={
-                'prompt':                prompt,
-                'image_size':            'square_hd',   # 1024×1024
-                'num_images':            1,
-                'num_inference_steps':   50,             # raised from 28 — sharper detail
-                'guidance_scale':        6.0,            # raised from 3.5 — more prompt-faithful
-                'enable_safety_checker': True
+                'prompt':          prompt,
+                'negative_prompt': (
+                    'blurry, soft focus, out of focus, bokeh, hazy, foggy, '
+                    'low resolution, low quality, jpeg artifacts, noise, grain, '
+                    'overexposed, underexposed, washed out, dull, flat lighting, '
+                    'watermark, text, logo, signature, frame, border, '
+                    'human hands, fingers, body parts, mannequin, jewellery stand, '
+                    'extra products, duplicate, cropped, deformed, distorted'
+                ),
+                'image_size':           'square_hd',   # 1024×1024
+                'num_images':           1,
+                'num_inference_steps':  30,             # Pro converges faster than Dev
+                'guidance_scale':       7.5,            # strict prompt-following
+                'safety_tolerance':     '2',            # 1=strict … 6=permissive
             },
-            timeout=120    # FLUX Dev can take up to 90s on cold start
+            timeout=120
         )
 
         print(f'[FLUX] HTTP {flux_response.status_code}')
