@@ -312,5 +312,11 @@ def generate_image_gemini():
 
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
+    # Local development server.
+    # Locally PORT is usually unset, so we default to 5000  ->  http://localhost:5000
+    # On Render the PORT env var is provided automatically and overrides this default.
+    # host="0.0.0.0" makes the app reachable both locally and on Render.
+    port = int(os.environ.get("PORT", 5000))
+    print(f"\n  Design Innovation Studio  ->  http://localhost:{port}")
+    print("  Press CTRL+C to stop.\n")
     app.run(host="0.0.0.0", port=port)
