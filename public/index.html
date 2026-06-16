@@ -864,7 +864,7 @@ ${focus?'Focus modifications on: '+focus:''}`;
 
   let parsed;
   try{
-    const res=await fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:8000,system,messages:[{role:'user',content:[imageBlock,{type:'text',text:'Scan the image carefully. Count every visible product. Classify each one. Then return the JSON with 6 modification ideas. For sets, every piece must appear in every imagen_prompt.'}]}]})});
+    const res=await fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:8000,system,messages:[{role:'user',content:[imageBlock,{type:'text',text:'Scan the image carefully. Count every visible product. Classify each one. Then return the JSON with 6 modification ideas. For sets, every piece must appear in every imagen_prompt.'}]}]})});
     clearInterval(timer);
     const data=await res.json();
     if(data.rate_limited) throw new Error(data.error);
