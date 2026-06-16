@@ -870,6 +870,8 @@ ${focus?'Focus modifications on: '+focus:''}`;
   try{
     const res=await fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:8000,system,messages:[{role:'user',content:[imageBlock,{type:'text',text:'Scan the image carefully. Count every visible product. Classify each one. Then return the JSON with 6 modification ideas. For sets, every piece must appear in every imagen_prompt.'}]}]})});
     clearInterval(timer);
+    const contentType=res.headers.get('content-type')||'';
+    if(!contentType.includes('application/json')){throw new Error('Server returned an error (HTTP '+res.status+'). The service may be restarting — please wait 30 seconds and try again.');}
     const data=await res.json();
     if(data.rate_limited) throw new Error(data.error);
     if(data.error) throw new Error(data.error.message||data.error);
@@ -917,6 +919,8 @@ ${focus?'Focus modifications on: '+focus:''}`;
     document.getElementById('progressFill').style.width = '100%';
     document.getElementById('progressLabel').textContent = 'Top pick ready!';
 
+    const ct1=res.headers.get('content-type')||'';
+    if(!ct1.includes('application/json')){throw new Error('Server returned an error (HTTP '+res.status+'). Please wait 30 seconds and try again.');}
     const data = await res.json();
     if (data.rate_limited) throw new Error(data.error);
     if (data.error) throw new Error(data.error);
@@ -1047,6 +1051,8 @@ async function generateIdeaImage(i) {
     });
     clearTimeout(timeoutId);
 
+    const ct3=res.headers.get('content-type')||'';
+    if(!ct3.includes('application/json')){throw new Error('Server returned an error (HTTP '+res.status+'). Please wait 30 seconds and try again.');}
     const data = await res.json();
     if (data.rate_limited) throw new Error(data.error);
     if (data.error) throw new Error(data.error);
