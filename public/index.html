@@ -688,10 +688,12 @@ Record with extreme precision:
 PHASE 4 — GENERATE 6 MODIFICATION IDEAS
 ═══════════════════════════════════════════
 ABSOLUTE RULES FOR MODIFICATIONS:
-1. Product type NEVER changes. Bracelet stays bracelet. Gold bar stays gold bar. Rose stays rose. Ring stays ring.
-2. For JEWELLERY SETS: ALL pieces must appear in EVERY modification. If original has necklace + earrings + bracelet, the modified version must show all three.
-3. Do NOT add a bail/loop to a bullion bar. Do NOT put a chain on a coin. Do NOT turn a rose into jewellery.
-4. Each modification must be commercially realistic and producible
+1. Product type NEVER changes. Bracelet stays bracelet. Gold bar stays gold bar. Rose stays rose. Ring stays ring. A ring MUST remain a ring — a wearable band with a setting on a finger. NEVER turn it into a sculpture, brooch, ornament, feather, pendant, or decorative object.
+2. The BASIC SILHOUETTE and WEARABLE STRUCTURE of the original product MUST be preserved. A ring must still look like a ring someone wears on their finger. A bracelet must still wrap around a wrist. A necklace must still hang around a neck. The modification changes DESIGN ELEMENTS (stones, motifs, engravings, textures, materials, settings) — it does NOT change the fundamental FORM or FUNCTION of the product.
+3. For JEWELLERY SETS: ALL pieces must appear in EVERY modification. If original has necklace + earrings + bracelet, the modified version must show all three.
+4. Do NOT add a bail/loop to a bullion bar. Do NOT put a chain on a coin. Do NOT turn a rose into jewellery.
+5. Each modification must be commercially realistic and producible
+6. THEME MOTIFS must be APPLIED TO the product structure, not REPLACE it. Example: a peacock theme on a ring means peacock-inspired engravings, feather-shaped settings, or peacock-coloured stones ON A RING — NOT a standalone peacock feather sculpture. The product must remain instantly recognisable as its original category.
 
 INNOVATION PHILOSOPHY — THINK LIKE A PRODUCT DEVELOPER, NOT A COLOURIST:
 Generate concepts using professional jewellery product-development thinking, not simple aesthetic alterations. This philosophy is HEAVILY WEIGHTED and overrides any instinct to play it safe.
@@ -746,10 +748,11 @@ FLUX PROMPT ARCHITECTURE — MANDATORY ORDER
 Every imagen_prompt MUST follow this exact 8-block structure, in this order, with no blocks skipped:
 
 BLOCK 1 — SUBJECT DECLARATION (what FLUX renders first)
-Start with the product type in ALL CAPS, then immediately state count and overall form.
+Start with the EXACT SAME product type as the original in ALL CAPS, then immediately state count and overall form. The product type here MUST match the original — if the original is a ring, this MUST say RING. Never invent a new product form.
 Example: "GOLD BRACELET. A single women's chain bracelet."
 Example: "JEWELLERY SET. Three-piece set: one necklace, two matching stud earrings."
 Example: "LOOSE GEMSTONE. One oval-cut tanzanite gemstone, unset."
+Example: "RING. A single ladies cocktail ring worn on a finger."
 
 BLOCK 2 — MATERIAL STACK (metal + stone + surface, most important for realism)
 State every material layer from outermost to innermost:
@@ -769,8 +772,8 @@ Describe the exact 3D form as if measuring it:
 For SETS: describe each piece separately with its own anatomy.
 
 BLOCK 4 — THE MODIFICATION (the only thing that differs from the original — be surgical)
-This is the single most important block. State EXACTLY what changed, EXACTLY what stayed the same.
-Format: "MODIFICATION: [Original element] has been replaced with [New element]. All other design elements remain identical to the original."
+This is the single most important block. State EXACTLY what changed, EXACTLY what stayed the same. The fundamental product FORM (ring band, bracelet chain, necklace chain, pendant shape) MUST remain unchanged — you are modifying DESIGN DETAILS, not rebuilding the product into a different object.
+Format: "MODIFICATION: [Original element] has been replaced with [New element]. The product remains a [product type] with the same basic structure. All other design elements remain identical to the original."
 Be specific about the modified component's new material, finish, shape, size, position, and colour.
 Bad example: "with enamel accents" — FLUX will guess where and what colour.
 Good example: "MODIFICATION: The smooth polished surface of each link has been replaced with royal blue guilloche enamel fill, covering 80% of each link face, with a thin 1mm gold border remaining around the enamel edge. Clasp remains original lobster-claw style in 18k yellow gold."
@@ -836,6 +839,7 @@ FLUX PROMPT QUALITY RULES — NON-NEGOTIABLE
 8. Minimum prompt length: 120 words. Shorter prompts produce inconsistent FLUX output.
 9. ALWAYS end every prompt with the full sharpness token string from Block 8 — these tokens ("RAW photo", "tack-sharp focus", "f/8 aperture") are what tell FLUX to render in macro detail mode. Missing them = blurry output.
 10. FOR RINGS specifically: always describe the halo diamond count, individual diamond sizes, prong style, and band taper — FLUX needs this to render each stone individually rather than as a blurry cluster.
+11. STRUCTURAL INTEGRITY CHECK: Before finalising any imagen_prompt, verify that the described product is STILL the same product type as the original. If the original is a ring, the prompt MUST describe a ring worn on a finger with a band — not a sculpture, ornament, brooch, or standalone art piece. If a theme motif has overtaken the product form, rewrite it so the motif is APPLIED TO the product (e.g. peacock feather pattern engraved on a ring band) rather than REPLACING it (e.g. a standalone feather sculpture).
 
 ═══════════════════════════════════════════
 LUXURY OUTPUT QUALITY RULES
