@@ -232,7 +232,25 @@ def generate_image_gemini():
         data   = request.get_json()
         prompt = data.get('prompt', '')
 
-        print(f'\n[FLUX] Prompt ({len(prompt)} chars): {prompt[:120]}...')
+        # Detect multi-piece sets so we DON'T tell FLUX to drop "extra products"
+        # (that negative would otherwise collapse a 4-piece set down to one item).
+        is_set = ('JEWELLERY SET' in prompt.upper()) or ('PIECES SHOWN TOGETHER' in prompt.upper())
+
+        # Base negatives shared by every render (quality / unwanted artefacts).
+        negative_prompt = (
+            'blurry, soft focus, out of focus, bokeh, hazy, foggy, '
+            'low resolution, low quality, jpeg artifacts, noise, grain, '
+            'overexposed, underexposed, washed out, dull, flat lighting, '
+            'watermark, text, logo, signature, frame, border, '
+            'human hands, fingers, body parts, mannequin, jewellery stand, '
+            'cropped, deformed, distorted'
+        )
+        # Only suppress multiple objects for SINGLE-product images.
+        # For sets, multiple pieces are required, so these negatives are omitted.
+        if not is_set:
+            negative_prompt += ', extra products, duplicate'
+
+        print(f'\n[FLUX] Prompt ({len(prompt)} chars, set={is_set}): {prompt[:120]}...')
 
         # ── Step 1: Call FLUX.1 Pro on fal.ai ────────────
         #
@@ -248,14 +266,7 @@ def generate_image_gemini():
             },
             json={
                 'prompt':          prompt,
-                'negative_prompt': (
-                    'blurry, soft focus, out of focus, bokeh, hazy, foggy, '
-                    'low resolution, low quality, jpeg artifacts, noise, grain, '
-                    'overexposed, underexposed, washed out, dull, flat lighting, '
-                    'watermark, text, logo, signature, frame, border, '
-                    'human hands, fingers, body parts, mannequin, jewellery stand, '
-                    'extra products, duplicate, cropped, deformed, distorted'
-                ),
+                'negative_prompt': negative_prompt,
                 'image_size':           'square_hd',   # 1024×1024
                 'num_images':           1,
                 'num_inference_steps':  30,             # Pro converges faster than Dev

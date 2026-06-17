@@ -747,10 +747,20 @@ FLUX PROMPT ARCHITECTURE — MANDATORY ORDER
 ══════════════════════════════════════════
 Every imagen_prompt MUST follow this exact 8-block structure, in this order, with no blocks skipped:
 
+⛔ CRITICAL — MULTI-PIECE SET MANDATE (READ FIRST, OVERRIDES EVERYTHING):
+If the original image contains MORE THAN ONE piece (e.g. a cuff bracelet + a pendant necklace + earrings), then it is a SET and the generated image MUST show EVERY SINGLE PIECE — never just one "hero" piece.
+- Count the pieces in the original. Write that exact count into the imagen_prompt. If the original has a bracelet, a necklace, and a pair of earrings, that is FOUR items (1 bracelet + 1 necklace + 2 earrings) and ALL FOUR must be fully visible in the rendered image.
+- The MODIFICATION (Block 4) must be applied CONSISTENTLY to EVERY piece, so they read as a matching collection. If the centre stone changes to emerald, EVERY piece gets the emerald treatment.
+- Every piece must be described separately (Block 3) AND explicitly placed in the frame (Block 5).
+- For any set, default to a FLAT-LAY overhead composition (Block 7) so all pieces fit in the square frame without crowding.
+- NEVER drop, omit, merge, or summarise pieces. NEVER render only the bracelet, only the pendant, or only the earrings. Missing even one piece is a FAILED output.
+
 BLOCK 1 — SUBJECT DECLARATION (what FLUX renders first)
 Start with the EXACT SAME product type as the original in ALL CAPS, then immediately state count and overall form. The product type here MUST match the original — if the original is a ring, this MUST say RING. Never invent a new product form.
+For a SET, the declaration MUST enumerate every piece with its quantity, e.g. "JEWELLERY SET. Four matching pieces shown together: one wide cuff bracelet, one oval pendant necklace, and two matching drop earrings."
 Example: "GOLD BRACELET. A single women's chain bracelet."
-Example: "JEWELLERY SET. Three-piece set: one necklace, two matching stud earrings."
+Example: "JEWELLERY SET. Three pieces shown together: one pendant necklace and two matching stud earrings."
+Example: "JEWELLERY SET. Four pieces shown together: one cuff bracelet, one pendant necklace, and two matching drop earrings — all in the same style."
 Example: "LOOSE GEMSTONE. One oval-cut tanzanite gemstone, unset."
 Example: "RING. A single ladies cocktail ring worn on a finger."
 
@@ -782,7 +792,7 @@ BLOCK 5 — SPATIAL ARRANGEMENT (where objects sit in the frame)
 FLUX needs to know where to place things. Without this, it centres randomly.
 Single product: "Presented lying flat, centred in frame, horizontal orientation, slight 15-degree angle."
 Pendant: "Chain draped in a loose U-shape, pendant hanging at centre-bottom of chain."
-Set: "Necklace positioned at top-centre. Left earring at mid-left. Right earring at mid-right. Bracelet at bottom-centre. All pieces evenly spaced with 2cm gaps between items."
+Set: name and place EVERY piece explicitly — e.g. "Flat-lay overhead view. Cuff bracelet at left-centre. Pendant necklace at right, chain forming a loose U-shape with the pendant face-up. Two matching drop earrings at bottom-centre, side by side. All four pieces fully visible, evenly spaced with clear gaps, none overlapping, none cropped." Do NOT stop after one piece.
 Ring: "Ring positioned upright, face-on, slight 10-degree tilt toward camera to show setting detail."
 
 BLOCK 6 — LIGHTING + PHOTOGRAPHY STYLE (controls realism and sharpness)
@@ -802,9 +812,11 @@ Always choose ONE of these:
 For flat-lay sets: "Photographed from directly overhead (bird's-eye view, 90 degrees), flat white surface."
 
 BLOCK 8 — QUALITY + NEGATIVE CONSTRAINTS (what FLUX must NOT hallucinate)
-Always end with: "RAW photo. Tack-sharp focus. f/8 aperture. Studio macro lens. Ultra-fine detail. 8K resolution. Photorealistic. Hyperrealistic product photography. No blur. No soft focus. No bokeh. No hands. No body parts. No model. No mannequin. No props. No jewellery stand. No extra products. No text overlays. No watermarks. Product fills 75% of frame. Nothing cropped."
+Always end with: "RAW photo. Tack-sharp focus. f/8 aperture. Studio macro lens. Ultra-fine detail. 8K resolution. Photorealistic. Hyperrealistic product photography. No blur. No soft focus. No bokeh. No hands. No body parts. No model. No mannequin. No props. No jewellery stand. No text overlays. No watermarks. Nothing cropped."
+For a SINGLE product, also add: "No extra products. Product fills 75% of frame."
+For a SET, do the OPPOSITE — NEVER write "no extra products" or "single product" (that would make FLUX delete pieces). Instead add: "All pieces of the set present and arranged together, filling 85% of frame."
 Add product-specific negatives:
-- For sets: "All [X] pieces fully visible, none cropped, none overlapping."
+- For sets: state the exact count and name them, e.g. "All 4 pieces (cuff bracelet, pendant necklace, two drop earrings) fully visible together in one image, none cropped, none overlapping, none missing. Do NOT show only one piece. Do NOT omit the earrings or the necklace."
 - For gemstones: "Stone fully visible, not mounted, no setting, no prongs."
 - For bullion bars: "Bar fully visible, all engravings sharp and readable."
 
@@ -857,6 +869,7 @@ CRITICAL FORMAT RULES:
 2. No newlines inside string values. No double quotes inside values — use single quotes
 3. imagen_prompt MUST begin with the product type in CAPS
 4. Exactly 6 ideas. Set top:true for the single best idea only
+5. SET PIECE-COUNT CHECK (mandatory): before finalising EACH imagen_prompt, count the pieces in the original. The imagen_prompt MUST describe and place that exact same number of pieces. If the original is a 4-piece set (cuff + necklace + 2 earrings), every one of the 6 imagen_prompts must show all 4 pieces. An imagen_prompt that describes fewer pieces than the original is INVALID — rewrite it.
 
 JSON structure:
 {"original":"[product category] — [complete description of all objects, materials, design details, and spatial arrangement for sets]","ideas":[{"name":"short idea name","modification":"precise description of exactly what changes","why":"commercial reason this sells","visual":"2-3 sentences describing the finished modified piece as a jeweler or product designer would brief a factory","imagen_prompt":"[PRODUCT TYPE IN CAPS]. [complete 8-block FLUX prompt following the architecture above — minimum 120 words]","top":false}]}
@@ -868,7 +881,7 @@ ${focus?'Focus modifications on: '+focus:''}`;
 
   let parsed;
   try{
-    const res=await fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:8000,system,messages:[{role:'user',content:[imageBlock,{type:'text',text:'Scan the image carefully. Count every visible product. Classify each one. Then return the JSON with 6 modification ideas. For sets, every piece must appear in every imagen_prompt.'}]}]})});
+    const res=await fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:8000,system,messages:[{role:'user',content:[imageBlock,{type:'text',text:'Scan the image carefully. Count every visible product (a cuff + necklace + pair of earrings = 4 pieces). Classify each one. Then return the JSON with 6 modification ideas. CRITICAL: if this is a multi-piece set, EVERY imagen_prompt must explicitly describe and place ALL pieces with the exact same piece count as the original — the generated image must show the whole set together (bracelet AND necklace AND earrings), never just one piece. Apply each modification consistently across every piece so they look like a matching collection.'}]}]})});
     clearInterval(timer);
     const contentType=res.headers.get('content-type')||'';
     if(!contentType.includes('application/json')){throw new Error('Server returned an error (HTTP '+res.status+'). The service may be restarting — please wait 30 seconds and try again.');}
