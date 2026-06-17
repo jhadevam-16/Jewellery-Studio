@@ -868,15 +868,41 @@ ${focus?'Focus modifications on: '+focus:''}`;
 
   let parsed;
   try{
+    _liveCount=0;   // reset live-render counter for this run
     const res=await fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:8000,system,messages:[{role:'user',content:[imageBlock,{type:'text',text:'Scan the image carefully. Count every visible product. Classify each one. Then return the JSON with 6 modification ideas. For sets, every piece must appear in every imagen_prompt.'}]}]})});
-    clearInterval(timer);
+
     const contentType=res.headers.get('content-type')||'';
-    if(!contentType.includes('application/json')){throw new Error('Server returned an error (HTTP '+res.status+'). The service may be restarting — please wait 30 seconds and try again.');}
-    const data=await res.json();
-    if(data.rate_limited) throw new Error(data.error);
-    if(data.error) throw new Error(data.error.message||data.error);
-    fetchUsageStatus(); // refresh usage bar
-    const raw=data.content.filter(b=>b.type==='text').map(b=>b.text).join('');
+    // A JSON response here means an error (e.g. rate-limit 429) — the success path is an SSE stream.
+    if(contentType.includes('application/json')){
+      clearInterval(timer);
+      const data=await res.json();
+      throw new Error(data.error||('Server returned an error (HTTP '+res.status+'). Please wait 30 seconds and try again.'));
+    }
+    if(!res.body){ clearInterval(timer); throw new Error('Your browser does not support streaming responses.'); }
+
+    // ── Consume the live SSE stream, rendering ideas as they arrive ──
+    clearInterval(timer);   // stop the rotating loader text; we drive the labels now
+    lbl.textContent='Generating ideas…';
+    lstep.textContent='Ideas appear below as they are written';
+    const reader=res.body.getReader();
+    const decoder=new TextDecoder();
+    let raw='', buffer='', streamErr=null;
+    while(true){
+      const {value,done}=await reader.read();
+      if(done) break;
+      buffer+=decoder.decode(value,{stream:true});
+      let nl;
+      while((nl=buffer.indexOf('\n\n'))>=0){
+        const line=buffer.slice(0,nl); buffer=buffer.slice(nl+2);
+        if(!line.startsWith('data: ')) continue;
+        let evt; try{ evt=JSON.parse(line.slice(6)); }catch(_){ continue; }
+        if(evt.type==='text'){ raw+=evt.text; progressiveRender(raw); }
+        else if(evt.type==='error'){ streamErr=evt.error||'Generation error'; }
+        else if(evt.type==='done'){ try{ fetchUsageStatus(); }catch(_){} }
+      }
+    }
+    clearInterval(timer);
+    if(streamErr) throw new Error(streamErr);
     parsed=robustParse(raw);
     if(!parsed) throw new Error('Could not parse response — please try again');
   }catch(e){
@@ -1017,6 +1043,72 @@ function renderSkeleton(data, topPick){
   _compareSelected = [];
   updateCompareBar();
   document.getElementById('resultsSection').classList.add('on');
+}
+
+// ── Live progressive rendering while Claude streams ───────────
+// Shows each idea card the instant its JSON object finishes streaming,
+// instead of waiting for all 6. Cards are text-only previews; the final
+// renderSkeleton() rebuild (after parsing) adds images + full controls.
+let _liveCount = 0;
+
+function _streamOriginal(raw){
+  const m = raw.match(/"original"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+  return m ? m[1].replace(/\\"/g,'"').replace(/\\n/g,' ').replace(/\\t/g,' ') : null;
+}
+
+function _completeIdeaObjects(raw){
+  const a = raw.indexOf('"ideas"');
+  if(a<0) return [];
+  const b = raw.indexOf('[', a);
+  if(b<0) return [];
+  const out=[]; let depth=0, objStart=-1, inStr=false, esc=false;
+  for(let i=b+1;i<raw.length;i++){
+    const c=raw[i];
+    if(inStr){ if(esc)esc=false; else if(c==='\\')esc=true; else if(c==='"')inStr=false; continue; }
+    if(c==='"'){ inStr=true; continue; }
+    if(c==='{'){ if(depth===0)objStart=i; depth++; }
+    else if(c==='}'){ depth--; if(depth===0&&objStart>=0){ out.push(raw.slice(objStart,i+1)); objStart=-1; } }
+    else if(c===']'&&depth===0){ break; }
+  }
+  return out;
+}
+
+function _esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function progressiveRender(raw){
+  const orig = _streamOriginal(raw);
+  if(orig){ const od=document.getElementById('originalDesc'); if(od) od.textContent=orig; }
+  const thumb=document.getElementById('resultThumb');
+  if(thumb && !thumb.getAttribute('src')){ thumb.src = pastedUrl||('data:'+uploadedMime+';base64,'+uploadedBase64); }
+
+  const objs=_completeIdeaObjects(raw);
+  if(objs.length<=_liveCount) return;
+
+  if(_liveCount===0){
+    document.getElementById('ideasGrid').innerHTML='';
+    document.getElementById('resultsSection').classList.add('on');
+  }
+  for(let i=_liveCount;i<objs.length;i++){
+    let idea; try{ idea=JSON.parse(objs[i]); }catch(_){ continue; }
+    const grid=document.getElementById('ideasGrid');
+    const card=document.createElement('div');
+    card.className='idea-card'+(idea.top===true?' top-pick':'');
+    if(idea.top===true) card.style.borderColor='var(--gold)';
+    card.innerHTML=`
+      <div class="idea-img-box">
+        <div class="idea-overlay" style="display:flex;">
+          <div class="idea-spin"></div>
+          <div style="font-size:10px;color:var(--ink-light);letter-spacing:0.04em;margin-top:6px;">Visual coming up…</div>
+        </div>
+      </div>
+      <div class="idea-content">
+        <div class="idea-num">${idea.top===true?'⭐ Top pick · ':''}Idea ${i+1}</div>
+        <div class="idea-name">${_esc(idea.name)||('Idea '+(i+1))}</div>
+        <div class="idea-why">${_esc(idea.why)}</div>
+      </div>`;
+    grid.appendChild(card);
+    _liveCount=i+1;
+  }
 }
 
 // On-demand image generation for non-top-pick ideas
