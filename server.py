@@ -3,7 +3,7 @@ import time
 import json
 import base64
 import requests
-from flask import Flask, request, jsonify, send_from_directory, Response, stream_with_context
+from flask import Flask, request, jsonify, send_from_directory
 from dotenv import load_dotenv
 from flask_cors import CORS
 
@@ -94,17 +94,12 @@ def static_files(path):
     return send_from_directory('public', path)
 
 
-# ── Anthropic (Claude) route — LIVE STREAMING TO BROWSER ──
+# ── Anthropic (Claude) route — STREAMING ──────────────────
 #
-# Uses stream=True upstream AND streams the text deltas straight
-# through to the browser as Server-Sent Events. The frontend can
-# render each idea the moment it is written, instead of waiting
-# for all 6 ideas to finish — big perceived speed-up.
-#
-# SSE events sent to the browser:
-#   data: {"type":"text","text":"<delta>"}
-#   data: {"type":"done","usage":{...}}
-#   data: {"type":"error","error":"<message>"}
+# Uses stream=True so Anthropic sends tokens as they arrive.
+# We accumulate the full text server-side and return the same
+# JSON shape the frontend already expects — zero frontend changes.
+# This eliminates read timeouts on long prompts entirely.
 #
 @app.route('/api/analyze', methods=['POST'])
 def analyze():
@@ -112,109 +107,115 @@ def analyze():
     if blocked:
         return blocked
 
-    ip      = _get_ip()
-    start   = time.time()
-    payload = request.get_json()
+    ip    = _get_ip()
+    start = time.time()
 
-    # Force streaming on — frontend payload may or may not include it
-    payload['stream'] = True
-    payload.setdefault('max_tokens', 2500)
+    try:
+        payload = request.get_json()
 
-    print(f'\n[CLAUDE] Starting live-streaming request (max_tokens={payload["max_tokens"]})')
+        # Force streaming on — frontend payload may or may not include it
+        payload['stream'] = True
 
-    def generate():
-        input_tokens  = 0
-        output_tokens = 0
-        char_count    = 0
-        try:
-            upstream = requests.post(
-                'https://api.anthropic.com/v1/messages',
-                headers={
-                    'Content-Type':      'application/json',
-                    'x-api-key':         ANTHROPIC_KEY,
-                    'anthropic-version': '2023-06-01'
-                },
-                json=payload,
-                stream=True,
-                timeout=180
-            )
+        # Cap max_tokens to avoid over-allocating (6 ideas × ~200 word prompts ≈ 1800 tokens)
+        payload.setdefault('max_tokens', 2500)
 
-            if upstream.status_code != 200:
-                try:
-                    err_body = upstream.json()
-                    err_msg  = err_body.get('error', {}).get('message') if isinstance(err_body.get('error'), dict) else err_body.get('error')
-                except Exception:
-                    err_msg = f'Anthropic HTTP {upstream.status_code}'
-                print(f'[CLAUDE] Non-200 from Anthropic: {upstream.status_code}')
-                yield 'data: ' + json.dumps({'type': 'error', 'error': err_msg or f'Anthropic HTTP {upstream.status_code}'}) + '\n\n'
-                return
+        print(f'\n[CLAUDE] Starting streaming request (max_tokens={payload["max_tokens"]})')
 
-            for raw_line in upstream.iter_lines():
-                if not raw_line:
-                    continue
+        upstream = requests.post(
+            'https://api.anthropic.com/v1/messages',
+            headers={
+                'Content-Type':      'application/json',
+                'x-api-key':         ANTHROPIC_KEY,
+                'anthropic-version': '2023-06-01'
+            },
+            json=payload,
+            stream=True,
+            timeout=180    # 3-minute socket timeout — stream keeps connection alive
+        )
 
-                line = raw_line.decode('utf-8') if isinstance(raw_line, bytes) else raw_line
-
-                if not line.startswith('data: '):
-                    continue
-
-                data_str = line[6:]
-                if data_str.strip() == '[DONE]':
-                    break
-
-                try:
-                    event = json.loads(data_str)
-                except json.JSONDecodeError:
-                    continue
-
-                etype = event.get('type', '')
-
-                if etype == 'content_block_delta':
-                    delta = event.get('delta', {})
-                    if delta.get('type') == 'text_delta':
-                        chunk = delta.get('text', '')
-                        char_count += len(chunk)
-                        yield 'data: ' + json.dumps({'type': 'text', 'text': chunk}) + '\n\n'
-
-                elif etype == 'message_start':
-                    input_tokens = event.get('message', {}).get('usage', {}).get('input_tokens', 0)
-
-                elif etype == 'message_delta':
-                    output_tokens = event.get('usage', {}).get('output_tokens', 0)
-
-                elif etype == 'error':
-                    err_msg = event.get('error', {}).get('message', 'Unknown stream error')
-                    print(f'[CLAUDE] Stream error: {err_msg}')
-                    yield 'data: ' + json.dumps({'type': 'error', 'error': err_msg}) + '\n\n'
-                    return
-
-            print(f'[CLAUDE] Stream complete — {char_count} chars, '
-                  f'{input_tokens} in / {output_tokens} out tokens, {time.time() - start:.1f}s')
-            yield 'data: ' + json.dumps({'type': 'done', 'usage': {'input_tokens': input_tokens, 'output_tokens': output_tokens}}) + '\n\n'
-
-        except requests.exceptions.Timeout:
-            print('[CLAUDE] Timeout waiting for Anthropic stream')
-            yield 'data: ' + json.dumps({'type': 'error', 'error': 'Claude API timed out — please try again'}) + '\n\n'
-
-        except requests.exceptions.ConnectionError as e:
-            print(f'[CLAUDE] Connection error: {e}')
-            yield 'data: ' + json.dumps({'type': 'error', 'error': 'Could not connect to Claude API — check your network'}) + '\n\n'
-
-        except Exception as e:
-            print(f'[CLAUDE] Unexpected error: {e}')
-            yield 'data: ' + json.dumps({'type': 'error', 'error': str(e)}) + '\n\n'
-
-        finally:
+        if upstream.status_code != 200:
+            # Anthropic returned an error before streaming started
             _record_usage(ip, time.time() - start)
+            try:
+                err_body = upstream.json()
+            except Exception:
+                err_body = {'error': f'Anthropic HTTP {upstream.status_code}'}
+            print(f'[CLAUDE] Non-200 from Anthropic: {upstream.status_code}')
+            return jsonify(err_body), upstream.status_code
 
-    return Response(
-        stream_with_context(generate()),
-        mimetype='text/event-stream',
-        headers={
-            'Cache-Control':     'no-cache',
-            'X-Accel-Buffering': 'no'   # disable proxy buffering so events arrive live
-        }
-    )
+        # ── Accumulate SSE stream ──────────────────────────
+        full_text    = ''
+        input_tokens = 0
+        output_tokens = 0
+
+        for raw_line in upstream.iter_lines():
+            if not raw_line:
+                continue
+
+            line = raw_line.decode('utf-8') if isinstance(raw_line, bytes) else raw_line
+
+            if not line.startswith('data: '):
+                continue
+
+            data_str = line[6:]  # strip "data: " prefix
+
+            if data_str.strip() == '[DONE]':
+                break
+
+            try:
+                event = json.loads(data_str)
+            except json.JSONDecodeError:
+                continue
+
+            etype = event.get('type', '')
+
+            if etype == 'content_block_delta':
+                delta = event.get('delta', {})
+                if delta.get('type') == 'text_delta':
+                    chunk = delta.get('text', '')
+                    full_text += chunk
+
+            elif etype == 'message_start':
+                usage = event.get('message', {}).get('usage', {})
+                input_tokens = usage.get('input_tokens', 0)
+
+            elif etype == 'message_delta':
+                usage = event.get('usage', {})
+                output_tokens = usage.get('output_tokens', 0)
+
+            elif etype == 'error':
+                # Anthropic sent an error mid-stream
+                err_msg = event.get('error', {}).get('message', 'Unknown stream error')
+                _record_usage(ip, time.time() - start)
+                print(f'[CLAUDE] Stream error: {err_msg}')
+                return jsonify({'error': err_msg}), 500
+
+        elapsed = time.time() - start
+        _record_usage(ip, elapsed)
+
+        print(f'[CLAUDE] Stream complete — {len(full_text)} chars, '
+              f'{input_tokens} in / {output_tokens} out tokens, {elapsed:.1f}s')
+
+        # Return in the exact same shape the frontend already expects
+        return jsonify({
+            'content': [{'type': 'text', 'text': full_text}],
+            'usage':   {'input_tokens': input_tokens, 'output_tokens': output_tokens}
+        })
+
+    except requests.exceptions.Timeout:
+        _record_usage(ip, time.time() - start)
+        print('[CLAUDE] Timeout waiting for Anthropic stream')
+        return jsonify({'error': 'Claude API timed out — please try again'}), 504
+
+    except requests.exceptions.ConnectionError as e:
+        _record_usage(ip, time.time() - start)
+        print(f'[CLAUDE] Connection error: {e}')
+        return jsonify({'error': 'Could not connect to Claude API — check your network'}), 502
+
+    except Exception as e:
+        _record_usage(ip, time.time() - start)
+        print(f'[CLAUDE] Unexpected error: {e}')
+        return jsonify({'error': str(e)}), 500
 
 
 # ── FLUX.1 Dev image generation ───────────────────────────
