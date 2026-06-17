@@ -893,7 +893,7 @@ ${focus?'Focus modifications on: '+focus:''}`;
   const topPick = parsed.ideas[topIdx !== -1 ? topIdx : 0];
 
   lbl.textContent='Generating top pick visualization...';
-  lstep.textContent='Takes ~20 seconds';
+  lstep.textContent='Takes ~2 minutes';
   document.getElementById('progressWrap').classList.add('on');
   document.getElementById('progressFill').style.width='10%';
   document.getElementById('progressLabel').textContent='Sending top pick to FLUX.1 Dev...';
@@ -989,7 +989,7 @@ function renderSkeleton(data, topPick){
            </div>
            <div id="ideaGenBtn${i}" class="idea-gen-btn-box">
              <button class="idea-gen-btn" onclick="generateIdeaImage(${i})">✦ Generate Image</button>
-             <div style="font-size:10px;color:var(--ink-light);margin-top:6px;letter-spacing:0.03em;">~20 seconds</div>
+             <div style="font-size:10px;color:var(--ink-light);margin-top:6px;letter-spacing:0.03em;">~2 minutes</div>
            </div>
          </div>`;
 
