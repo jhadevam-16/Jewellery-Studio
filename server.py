@@ -15,12 +15,11 @@ CORS(app)
 ANTHROPIC_KEY = os.getenv('ANTHROPIC_KEY')
 FAL_KEY       = os.getenv('FAL_KEY')
 
-# ── Rate-limit config ─────────────────────────────────────
+
 WINDOW_SECONDS = 3600    # 1-hour rolling window
 USAGE_LIMIT    = 1500    # 25 minutes in seconds
 
-# In-memory store:  ip -> { "window_start": float, "used": float, "last_req": float }
-_usage = {}
+
 
 def _get_ip():
     """Get real client IP (works behind Render's proxy)."""
@@ -68,7 +67,7 @@ def _check_limit():
     return None
 
 
-# ── Usage status endpoint (polled by frontend) ────────────
+
 @app.route('/api/usage-status')
 def usage_status():
     ip   = _get_ip()
@@ -84,7 +83,7 @@ def usage_status():
     })
 
 
-# ── Serve frontend ─────────────────────────────────────────
+
 @app.route('/')
 def index():
     return send_from_directory('public', 'index.html')
